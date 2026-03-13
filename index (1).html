@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>מוצא מסלולים — ייעול נסיעות</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f0f2f7;
+      --surface: #ffffff;
+      --surface2: #f7f8fc;
+      --border: #e2e6f0;
+      --border2: #d0d6e8;
+      --text: #1a1f36;
+      --text2: #4a5275;
+      --text3: #8892b0;
+      --primary: #2563eb;
+      --primary-light: #eff4ff;
+      --primary-dark: #1d4ed8;
+      --accent: #f59e0b;
+      --accent-light: #fffbeb;
+      --success: #10b981;
+      --success-light: #ecfdf5;
+      --danger: #ef4444;
+      --danger-light: #fef2f2;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+      --shadow: 0 4px 16px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.05);
+      --shadow-lg: 0 12px 40px rgba(0,0,0,.12), 0 4px 12px rgba(0,0,0,.06);
+      --radius: 14px;
+      --radius-sm: 8px;
+      --radius-xs: 6px;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: 'Heebo', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    /* ─── HEADER ─── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: var(--shadow-sm);
+    }
+    .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: -0.3px;
+    }
+    .logo-icon {
+      width: 34px;
+      height: 34px;
+      background: var(--primary);
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 16px;
+    }
+    .badge {
+      background: var(--primary-light);
+      color: var(--primary);
+      border: 1px solid #bfdbfe;
+      border-radius: 20px;
+      padding: 3px 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    /* ─── LAYOUT ─── */
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 24px 60px;
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      gap: 28px;
+      align-items: start;
+    }
+
+    /* ─── CARD ─── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .card-header {
+      padding: 20px 24px 0;
+    }
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+    }
+    .card-title svg { color: var(--primary); flex-shrink: 0; }
+    .card-subtitle {
+      font-size: 13px;
+      color: var(--text3);
+      margin-top: 4px;
+    }
+    .card-body { padding: 20px 24px 24px; }
+
+    /* ─── COLUMN LABELS ─── */
+    .col-labels {
+      display: flex;
+      gap: 8px;
+      padding: 0 2px;
+      margin-bottom: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .col-labels .lbl-num { width: 28px; flex-shrink: 0; }
+    .col-labels .lbl-loc { flex: 3; }
+    .col-labels .lbl-name { flex: 2; }
+    .col-labels .lbl-del { width: 30px; flex-shrink: 0; }
+
+    /* ─── STOP ROWS ─── */
+    #stops-container { display: flex; flex-direction: column; gap: 8px; }
+
+    .stop-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      transition: border-color .15s, background .15s;
+      animation: slideIn .18s ease;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .stop-row.is-start { background: #f0fdf4; border-color: #bbf7d0; }
+    .stop-row.has-error { background: var(--danger-light); border-color: #fecaca; }
+    .stop-row.resolved { background: var(--success-light); border-color: #a7f3d0; }
+
+    .num-badge {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      font-size: 12px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: white;
+      background: var(--primary);
+    }
+    .stop-row.is-start .num-badge { background: var(--success); }
+    .stop-row.has-error .num-badge { background: var(--danger); }
+
+    .stop-row input {
+      background: white;
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-xs);
+      padding: 7px 10px;
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+      min-width: 0;
+    }
+    .stop-row input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+    }
+    .stop-row .inp-loc { flex: 3; direction: ltr; text-align: left; }
+    .stop-row .inp-name { flex: 2; }
+
+    .btn-del {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-xs);
+      border: none;
+      background: transparent;
+      color: var(--text3);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: color .15s, background .15s;
+    }
+    .btn-del:hover:not(:disabled) { color: var(--danger); background: var(--danger-light); }
+    .btn-del:disabled { opacity: 0.2; cursor: not-allowed; }
+
+    .error-msg {
+      font-size: 11px;
+      color: var(--danger);
+      margin-top: 3px;
+      padding: 0 38px 0 0;
+    }
+
+    /* ─── ADD STOP BUTTON ─── */
+    #btn-add {
+      margin-top: 10px;
+      width: 100%;
+      padding: 10px;
+      border: 2px dashed var(--border2);
+      border-radius: 10px;
+      background: transparent;
+      color: var(--text3);
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: border-color .15s, color .15s, background .15s;
+    }
+    #btn-add:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+
+    /* ─── CALCULATE BUTTON ─── */
+    #btn-calc {
+      margin-top: 16px;
+      width: 100%;
+      height: 52px;
+      border-radius: 12px;
+      border: none;
+      background: var(--primary);
+      color: white;
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: background .15s, transform .1s, box-shadow .15s;
+      box-shadow: 0 4px 12px rgba(37,99,235,.3);
+    }
+    #btn-calc:hover:not(:disabled) {
+      background: var(--primary-dark);
+      box-shadow: 0 6px 20px rgba(37,99,235,.4);
+      transform: translateY(-1px);
+    }
+    #btn-calc:active:not(:disabled) { transform: translateY(0); }
+    #btn-calc:disabled { background: #93c5fd; cursor: not-allowed; box-shadow: none; transform: none; }
+
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2.5px solid rgba(255,255,255,.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── HOW IT WORKS ─── */
+    .info-box {
+      margin-top: 16px;
+      background: var(--primary-light);
+      border: 1px solid #bfdbfe;
+      border-radius: var(--radius);
+      padding: 16px 18px;
+    }
+    .info-box h3 {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .info-box ul { list-style: none; }
+    .info-box li {
+      font-size: 13px;
+      color: var(--text2);
+      padding: 2px 0;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .info-box li::before { content: "→"; color: var(--primary); font-weight: 700; flex-shrink: 0; }
+
+    /* ─── RIGHT PANEL ─── */
+    #panel-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 420px;
+      text-align: center;
+      border: 2px dashed var(--border2);
+      border-radius: var(--radius);
+      padding: 60px 40px;
+      color: var(--text3);
+      animation: fadeIn .3s ease;
+    }
+    .empty-icon {
+      width: 72px; height: 72px;
+      background: var(--surface);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      margin-bottom: 16px;
+      border: 2px solid var(--border);
+    }
+    #panel-empty h3 { font-size: 18px; font-weight: 700; color: var(--text2); margin-bottom: 8px; }
+    #panel-empty p { font-size: 14px; max-width: 280px; }
+
+    #panel-result { display: none; animation: fadeUp .35s ease; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* ─── MAP ─── */
+    #map-wrap {
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+    }
+    #map { height: 420px; width: 100%; }
+    .map-footer {
+      background: var(--surface);
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid var(--border);
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .map-legend { display: flex; align-items: center; gap: 16px; font-size: 13px; color: var(--text3); }
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .dot.green { background: var(--success); }
+    .dot.red { background: var(--danger); }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .total-badge {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text2);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* ─── RESULTS LIST ─── */
+    .results-card {
+      margin-top: 18px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .results-head {
+      padding: 16px 20px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .results-head-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .link-toggle {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 3px;
+    }
+    .link-toggle button {
+      padding: 5px 14px;
+      border: none;
+      background: transparent;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      color: var(--text3);
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+    .link-toggle button.active {
+      background: var(--primary);
+      color: white;
+      box-shadow: var(--shadow-sm);
+    }
+    #waypoints-list { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+    .waypoint-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+    }
+    .waypoint-item.first { background: #f0fdf4; border-color: #bbf7d0; }
+    .wp-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      font-size: 12px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+      color: white;
+    }
+    .wp-num.green { background: var(--success); }
+    .wp-num.red { background: var(--danger); }
+    .wp-info { flex: 1; min-width: 0; }
+    .wp-name { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
+    .wp-link a { font-size: 13px; color: var(--primary); text-decoration: none; font-weight: 500; }
+    .wp-link a:hover { text-decoration: underline; }
+    .wp-time { font-size: 12px; color: var(--text3); margin-top: 4px; display: flex; align-items: center; gap: 4px; }
+    .wp-end { font-size: 12px; color: var(--success); font-weight: 600; margin-top: 4px; }
+
+    /* ─── WHATSAPP BOX ─── */
+    .wa-section { padding: 0 20px 20px; }
+    .wa-preview {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 10px;
+      padding: 14px 16px;
+      font-size: 13px;
+      font-family: 'Courier New', monospace;
+      white-space: pre-wrap;
+      max-height: 220px;
+      overflow-y: auto;
+      color: var(--text2);
+      line-height: 1.7;
+      direction: rtl;
+      text-align: right;
+    }
+    #btn-copy {
+      margin-top: 12px;
+      width: 100%;
+      height: 46px;
+      border-radius: 10px;
+      border: 2px solid var(--success);
+      background: white;
+      color: var(--success);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background .15s, color .15s, transform .1s;
+    }
+    #btn-copy:hover { background: var(--success); color: white; }
+    #btn-copy.copied { background: var(--success); color: white; }
+    #btn-copy:active { transform: scale(.98); }
+
+    /* ─── CUSTOM LEAFLET MARKERS ─── */
+    .custom-marker {
+      width: 30px !important;
+      height: 30px !important;
+      border-radius: 50%;
+      display: flex !important;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 800;
+      color: white;
+      font-family: 'Heebo', sans-serif;
+      box-shadow: 0 3px 10px rgba(0,0,0,.25);
+      border: 2.5px solid white;
+    }
+    .marker-start { background: var(--success) !important; }
+    .marker-stop { background: var(--danger) !important; }
+
+    /* ─── TOAST ─── */
+    #toast-container {
+      position: fixed;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .toast {
+      background: var(--text);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      box-shadow: var(--shadow-lg);
+      animation: toastIn .25s ease;
+      pointer-events: auto;
+      max-width: 320px;
+      text-align: center;
+    }
+    .toast.error { background: var(--danger); }
+    .toast.success { background: var(--success); }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(-10px) scale(.95); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* ─── RESPONSIVE ─── */
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; gap: 20px; padding: 20px 16px 60px; }
+    }
+    @media (max-width: 560px) {
+      .col-labels .lbl-name, .stop-row .inp-name { display: none; }
+      .stop-row .inp-loc { flex: 1; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+        </svg>
+      </div>
+      מוצא מסלולים
+    </div>
+    <span class="badge">כלי חינמי לתכנון נסיעות</span>
+  </div>
+</header>
+
+<div id="toast-container"></div>
+
+<main>
+  <!-- LEFT: INPUT PANEL -->
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          תחנות הנסיעה
+        </div>
+        <div class="card-subtitle">התחנה הראשונה היא תמיד נקודת ההתחלה ולא תשתנה.</div>
+      </div>
+      <div class="card-body">
+        <div class="col-labels">
+          <div class="lbl-num"></div>
+          <div class="lbl-loc">נ.צ / קישור גוגל מפות</div>
+          <div class="lbl-name">שם התחנה</div>
+          <div class="lbl-del"></div>
+        </div>
+
+        <div id="stops-container"></div>
+
+        <button id="btn-add" onclick="addStop()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          הוסף תחנה
+        </button>
+
+        <button id="btn-calc" onclick="calculate()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+          בניית מסלול נסיעה
+        </button>
+      </div>
+    </div>
+
+    <div class="info-box">
+      <h3>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        איך זה עובד?
+      </h3>
+      <ul>
+        <li>הזן קואורדינטות (31.747, 34.988) או קישור גוגל מפות</li>
+        <li>המערכת תמצא את הסדר המהיר ביותר לביקור כל התחנות</li>
+        <li>העתק את הרשימה לווצאפ לשליח עם קישורי ניווט</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- RIGHT: OUTPUT PANEL -->
+  <div>
+    <div id="panel-empty">
+      <div class="empty-icon">🗺️</div>
+      <h3>המפה שלך תופיע כאן</h3>
+      <p>הזן תחנות ולחץ "בניית מסלול נסיעה" כדי לקבל את הסדר האופטימלי.</p>
+    </div>
+
+    <div id="panel-result">
+      <div id="map-wrap">
+        <div id="map"></div>
+        <div class="map-footer">
+          <div class="map-legend">
+            <div class="legend-item"><div class="dot green"></div> התחלה</div>
+            <div class="legend-item"><div class="dot red"></div> תחנה</div>
+          </div>
+          <div id="total-badge" class="total-badge" style="display:none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span id="total-time"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="results-card">
+        <div class="results-head">
+          <div class="results-head-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            רשימה לנהג
+          </div>
+          <div class="link-toggle">
+            <button id="btn-waze" class="active" onclick="setLinkType('waze')">Waze</button>
+            <button id="btn-gmaps" onclick="setLinkType('gmaps')">Google Maps</button>
+          </div>
+        </div>
+        <div id="waypoints-list"></div>
+        <div class="wa-section">
+          <div class="wa-preview" id="wa-preview"></div>
+          <button id="btn-copy" onclick="copyToClipboard()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            העתק הודעה לווצאפ
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ─── STATE ───────────────────────────────────────────────────────────────────
+var stops = [];
+var result = null;
+var linkType = 'waze';
+var map = null;
+var stopCounter = 0;
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+function init() {
+  addStop('', '');
+  addStop('', '');
+  addStop('', '');
+}
+
+// ─── STOPS ────────────────────────────────────────────────────────────────────
+function addStop(location, name) {
+  var id = ++stopCounter;
+  stops.push({ id: id, location: location || '', name: name || '', error: null, resolved: false });
+  renderStops();
+}
+
+function removeStop(id) {
+  if (stops.length <= 2) { showToast('דרושות לפחות 2 תחנות'); return; }
+  stops = stops.filter(function(s) { return s.id !== id; });
+  renderStops();
+}
+
+function updateStop(id, field, value) {
+  var s = stops.find(function(s) { return s.id === id; });
+  if (s) { s[field] = value; s.error = null; s.resolved = false; }
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderStops() {
+  var html = '';
+  for (var i = 0; i < stops.length; i++) {
+    var stop = stops[i];
+    var isStart = (i === 0);
+    var cls = stop.error ? 'has-error' : (stop.resolved ? 'resolved' : (isStart ? 'is-start' : ''));
+    html += '<div>';
+    html += '<div class="stop-row ' + cls + '">';
+    html += '<div class="num-badge">' + (i + 1) + '</div>';
+    html += '<input class="inp-loc" type="text" dir="ltr" value="' + esc(stop.location) + '"';
+    html += ' placeholder="' + (isStart ? 'נקודת התחלה (נ.צ / קישור)' : 'נ.צ / קישור גוגל מפות') + '"';
+    html += ' oninput="updateStop(' + stop.id + ',\'location\',this.value)">';
+    html += '<input class="inp-name" type="text" dir="rtl" value="' + esc(stop.name) + '"';
+    html += ' placeholder="' + (isStart ? 'שם (אופציונלי)' : 'שם התחנה') + '"';
+    html += ' oninput="updateStop(' + stop.id + ',\'name\',this.value)">';
+    html += '<button class="btn-del" onclick="removeStop(' + stop.id + ')"' + (stops.length <= 2 ? ' disabled' : '') + '>';
+    html += '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>';
+    html += '</button></div>';
+    if (stop.error) html += '<div class="error-msg">⚠️ ' + esc(stop.error) + '</div>';
+    html += '</div>';
+  }
+  document.getElementById('stops-container').innerHTML = html;
+}
+
+// ─── COORD EXTRACTION ─────────────────────────────────────────────────────────
+function isValidCoord(lat, lon) {
+  return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180 && !(lat === 0 && lon === 0);
+}
+
+function extractCoords(text) {
+  var t = String(text || '').trim();
+  var patterns = [
+    /@(-?\d+\.\d+),(-?\d+\.\d+)/,
+    /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/,
+    /[?&]q=(-?\d+\.\d+)[,+](-?\d+\.\d+)/,
+    /[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/,
+    /[?&]center=(-?\d+\.\d+),(-?\d+\.\d+)/,
+    /\/(-?\d+\.\d+),(-?\d+\.\d+)/,
+    /^(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)$/,
+    /(-?\d+\.\d{4,})\s*,\s*(-?\d+\.\d{4,})/
+  ];
+  for (var i = 0; i < patterns.length; i++) {
+    var m = t.match(patterns[i]);
+    if (m) {
+      var lat = parseFloat(m[1]), lon = parseFloat(m[2]);
+      if (isValidCoord(lat, lon)) return { lat: lat, lon: lon };
+    }
+  }
+  return null;
+}
+
+function extractCoordsFromHtml(html) {
+  var pat = /https?:\/\/(?:www\.)?(?:google\.com\/maps|maps\.google\.com)[^\s"'<>]*/g;
+  var m;
+  while ((m = pat.exec(html)) !== null) {
+    var c = extractCoords(decodeURIComponent(m[0]));
+    if (c) return c;
+  }
+  var a = html.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (a) { var lat=parseFloat(a[1]),lon=parseFloat(a[2]); if(isValidCoord(lat,lon)) return {lat:lat,lon:lon}; }
+  var b = html.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+  if (b) { var lat2=parseFloat(b[1]),lon2=parseFloat(b[2]); if(isValidCoord(lat2,lon2)) return {lat:lat2,lon:lon2}; }
+  return null;
+}
+
+// Safe fetch with manual timeout — no AbortController
+function timedFetch(url, ms, options) {
+  return new Promise(function(resolve, reject) {
+    var done = false;
+    var timer = setTimeout(function() {
+      if (!done) { done = true; reject(new Error('timeout')); }
+    }, ms || 10000);
+    fetch(url, options || {}).then(function(r) {
+      if (!done) { done = true; clearTimeout(timer); resolve(r); }
+    }, function(e) {
+      if (!done) { done = true; clearTimeout(timer); reject(e); }
+    });
+  });
+}
+
+var PROXIES = [
+  function(url) {
+    return timedFetch('https://corsproxy.io/?' + encodeURIComponent(url), 12000).then(function(r) { return r.text(); });
+  },
+  function(url) {
+    return timedFetch('https://api.allorigins.win/get?url=' + encodeURIComponent(url), 12000)
+      .then(function(r) { return r.json(); }).then(function(d) { return d.contents || ''; });
+  },
+  function(url) {
+    return timedFetch('https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url), 12000).then(function(r) { return r.text(); });
+  }
+];
+
+function fetchViaProxy(url) {
+  var i = 0;
+  function next() {
+    if (i >= PROXIES.length) return Promise.reject(new Error('all_proxies_failed'));
+    return PROXIES[i++](url).then(function(html) {
+      if (html && html.length > 50) return html;
+      return next();
+    }, function() { return next(); });
+  }
+  return next();
+}
+
+function resolveLocation(stop) {
+  var line = stop.location.trim();
+  if (!line) return Promise.resolve(Object.assign({}, stop, { error: 'שדה ריק' }));
+  var direct = extractCoords(line);
+  if (direct) return Promise.resolve(Object.assign({}, stop, { lat: direct.lat, lon: direct.lon, error: null }));
+  var isUrl = line.indexOf('http') === 0;
+  if (!isUrl) return Promise.resolve(Object.assign({}, stop, { error: 'הכנס נ.צ (31.77,35.21) או קישור גוגל מפות' }));
+  return fetchViaProxy(line).then(function(html) {
+    var c = extractCoordsFromHtml(html) || extractCoords(html);
+    if (c) return Object.assign({}, stop, { lat: c.lat, lon: c.lon, error: null });
+    return Object.assign({}, stop, { error: 'לא נמצאו קואורדינטות — נסה להדביק נ.צ ישירות' });
+  }, function() {
+    return Object.assign({}, stop, { error: 'שגיאת רשת בקישור — נסה להדביק נ.צ ישירות' });
+  });
+}
+
+// ─── ROUTING ──────────────────────────────────────────────────────────────────
+function haversine(lat1, lon1, lat2, lon2) {
+  var R = 6371000;
+  var dLat = (lat2 - lat1) * Math.PI / 180;
+  var dLon = (lon2 - lon1) * Math.PI / 180;
+  var a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+          Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+          Math.sin(dLon/2)*Math.sin(dLon/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// Nearest-neighbor ordering — used only when OSRM is unavailable
+function buildOfflineResult(locations) {
+  var n = locations.length;
+  var visited = new Array(n).fill(false);
+  var order = [0]; visited[0] = true;
+  for (var step = 1; step < n; step++) {
+    var last = order[order.length - 1], best = -1, bestD = Infinity;
+    for (var j = 0; j < n; j++) {
+      if (!visited[j]) {
+        var d = haversine(locations[last].lat, locations[last].lon, locations[j].lat, locations[j].lon);
+        if (d < bestD) { bestD = d; best = j; }
+      }
+    }
+    visited[best] = true; order.push(best);
+  }
+  var wps = order.map(function(idx, i) {
+    return { order: i+1, lat: locations[idx].lat, lon: locations[idx].lon, name: locations[idx].name,
+             durationToNext: null, distanceToNext: null };
+  });
+  var geo = wps.map(function(w) { return [w.lat, w.lon]; });
+  return { waypoints: wps, geometry: geo, totalDuration: 0, totalDistance: 0, offline: true };
+}
+
+// ─── ⚙️ הכנס כאן את ה-API KEY שלך מ-openrouteservice.org ──────────────────────
+var ORS_API_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImFjYzE5ZGQyOGRkOTQwMDFiNjBkZjNiYzZjYmE3OTQ1IiwiaCI6Im11cm11cjY0In0=';
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Try ORS first (reliable, real road data), fall back to OSRM public servers
+var OSRM_SERVERS = [
+  'https://router.project-osrm.org',
+  'https://routing.openstreetmap.de/routed-car'
+];
+
+// OpenRouteService — uses real Israeli road data, supports optimize
+function orsFetch(locations) {
+  if (!ORS_API_KEY) return Promise.reject(new Error('no_key'));
+  var coords = locations.map(function(l) { return [l.lon, l.lat]; });
+  var url = 'https://api.openrouteservice.org/v2/optimization';
+  var jobs = [];
+  // First location is the start depot, rest are jobs
+  for (var i = 1; i < locations.length; i++) {
+    jobs.push({ id: i, location: coords[i] });
+  }
+  var body = {
+    jobs: jobs,
+    shipments: [],
+    vehicles: [{ id: 1, profile: 'driving-car', start: coords[0], end: coords[0] }]
+  };
+  return timedFetch(url, 15000, {
+    method: 'POST',
+    headers: { 'Authorization': ORS_API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  }).then(function(r) {
+    if (!r.ok) throw new Error('ORS HTTP ' + r.status);
+    return r.json();
+  }).then(function(d) {
+    if (!d.routes || !d.routes[0]) throw new Error('ORS bad response');
+    var route = d.routes[0];
+    // Get ordered locations from ORS steps
+    var orderedIds = [0]; // start with depot
+    route.steps.forEach(function(s) {
+      if (s.type === 'job') orderedIds.push(s.job);
+    });
+    var wps = orderedIds.map(function(idx, i) {
+      var loc = locations[idx];
+      var step = route.steps[i] || {};
+      return {
+        order: i + 1,
+        lat: loc.lat, lon: loc.lon, name: loc.name,
+        durationToNext: (i < orderedIds.length - 1 && route.steps[i]) ? route.steps[i].duration : null,
+        distanceToNext: (i < orderedIds.length - 1 && route.steps[i]) ? route.steps[i].distance : null
+      };
+    });
+    // Fetch actual road geometry via ORS directions
+    var orderedCoords = orderedIds.map(function(idx) { return [locations[idx].lon, locations[idx].lat]; });
+    return orsDirections(orderedCoords).then(function(geo) {
+      var totalDur  = wps.reduce(function(s,w){ return s + (w.durationToNext||0); }, 0);
+      var totalDist = wps.reduce(function(s,w){ return s + (w.distanceToNext||0); }, 0);
+      return { waypoints: wps, geometry: geo, totalDuration: totalDur, totalDistance: totalDist, offline: false };
+    });
+  });
+}
+
+function orsDirections(coordsArray) {
+  var url = 'https://api.openrouteservice.org/v2/directions/driving-car/geojson';
+  var body = { coordinates: coordsArray };
+  return timedFetch(url, 15000, {
+    method: 'POST',
+    headers: { 'Authorization': ORS_API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  }).then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (!d.features || !d.features[0]) return coordsArray.map(function(c){ return [c[1],c[0]]; });
+    return d.features[0].geometry.coordinates.map(function(c){ return [c[1], c[0]]; });
+  }).catch(function() {
+    return coordsArray.map(function(c){ return [c[1], c[0]]; });
+  });
+}
+
+function osrmFetch(path) {
+  var i = 0;
+  function next() {
+    if (i >= OSRM_SERVERS.length) return Promise.reject(new Error('no_server'));
+    var url = OSRM_SERVERS[i++] + path;
+    return timedFetch(url, 8000).then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }, function() { return next(); }).catch(function() { return next(); });
+  }
+  return next();
+}
+
+function osrmOptimize(locations) {
+  var coords = locations.map(function(l) { return l.lon + ',' + l.lat; }).join(';');
+  if (locations.length === 2) {
+    return osrmFetch('/route/v1/driving/' + coords + '?overview=full&geometries=geojson&steps=false')
+      .then(function(d) {
+        if (d.code !== 'Ok' || !d.routes || !d.routes[0]) throw new Error('bad');
+        var rt = d.routes[0];
+        var geo = rt.geometry.coordinates.map(function(c) { return [c[1], c[0]]; });
+        var dur = (rt.legs[0] && rt.legs[0].duration) || 0;
+        var dist = (rt.legs[0] && rt.legs[0].distance) || 0;
+        return { waypoints: [
+          { order:1, lat:locations[0].lat, lon:locations[0].lon, name:locations[0].name, durationToNext:dur, distanceToNext:dist },
+          { order:2, lat:locations[1].lat, lon:locations[1].lon, name:locations[1].name, durationToNext:null, distanceToNext:null }
+        ], geometry:geo, totalDuration:dur, totalDistance:dist, offline:false };
+      });
+  }
+  return osrmFetch('/trip/v1/driving/' + coords + '?source=first&destination=any&overview=full&geometries=geojson&steps=false')
+    .then(function(d) {
+      if (d.code !== 'Ok' || !d.trips || !d.trips[0]) throw new Error('bad');
+      var trip = d.trips[0];
+      var geo = trip.geometry.coordinates.map(function(c) { return [c[1], c[0]]; });
+      var sorted = d.waypoints.slice().sort(function(a, b) {
+        return a.trips_index !== b.trips_index ? a.trips_index - b.trips_index : a.waypoint_index - b.waypoint_index;
+      });
+      var ordered = sorted.map(function(wp) { return locations[wp.waypoint_index]; });
+      var wps = ordered.map(function(loc, i) {
+        return { order:i+1, lat:loc.lat, lon:loc.lon, name:loc.name,
+          durationToNext: i < trip.legs.length ? trip.legs[i].duration : null,
+          distanceToNext: i < trip.legs.length ? trip.legs[i].distance : null };
+      });
+      var totalDur  = trip.legs.reduce(function(s,l){ return s+l.duration; }, 0);
+      var totalDist = trip.legs.reduce(function(s,l){ return s+l.distance; }, 0);
+      return { waypoints:wps, geometry:geo, totalDuration:totalDur, totalDistance:totalDist, offline:false };
+    });
+}
+
+function optimizeRoute(locations) {
+  // 1. Try ORS if key is set
+  if (ORS_API_KEY) {
+    return orsFetch(locations)
+      .catch(function() { return osrmOptimize(locations); })
+      .catch(function() { return buildOfflineResult(locations); });
+  }
+  // 2. Try OSRM public servers
+  return osrmOptimize(locations)
+    .catch(function() { return buildOfflineResult(locations); });
+}
+
+// ─── CALCULATE ────────────────────────────────────────────────────────────────
+function calculate() {
+  var filled = stops.filter(function(s) { return s.location.trim(); });
+  if (filled.length < 2) { showToast('יש להזין לפחות 2 תחנות', 'error'); return; }
+  setLoading(true);
+  Promise.all(filled.map(function(s) { return resolveLocation(s); }))
+    .then(function(resolved) {
+      resolved.forEach(function(r) {
+        var s = stops.find(function(s) { return s.id === r.id; });
+        if (s) { s.error = r.error || null; s.resolved = !r.error; }
+      });
+      renderStops();
+      var errors = resolved.filter(function(r) { return r.error; });
+      if (errors.length) showToast(errors.length + ' תחנות לא נפענחו ויושמטו', 'error');
+      var valid = resolved.filter(function(r) { return !r.error && r.lat != null; });
+      if (valid.length < 2) { showToast('דרושות לפחות 2 נקודות תקינות', 'error'); setLoading(false); return; }
+      return optimizeRoute(valid).then(function(res) {
+        result = res;
+        renderResult();
+        if (result.offline) {
+          showToast('סדר תחנות חושב. שרת הניתוב לא זמין — זמנים לא מוצגים', 'error');
+        } else {
+          showToast('המסלול חושב בהצלחה! ' + result.waypoints.length + ' תחנות', 'success');
+        }
+        setLoading(false);
+      });
+    })
+    .catch(function(e) {
+      showToast('שגיאה: ' + (e && e.message || 'בעיית רשת'), 'error');
+      setLoading(false);
+    });
+}
+
+// ─── RENDER ───────────────────────────────────────────────────────────────────
+function renderResult() {
+  document.getElementById('panel-empty').style.display = 'none';
+  var panel = document.getElementById('panel-result');
+  panel.style.display = 'block';
+
+  // Badge
+  var badge = document.getElementById('total-badge');
+  var timeEl = document.getElementById('total-time');
+  badge.style.display = 'flex';
+  if (result.offline) {
+    badge.style.cssText = 'display:flex;background:#fff7ed;border-color:#fed7aa;color:#c2410c;border-radius:20px;padding:5px 14px;font-size:13px;font-weight:600;align-items:center;gap:6px;border:1px solid #fed7aa;';
+    timeEl.textContent = '⚠️ שרת ניתוב לא זמין — זמנים לא מוצגים';
+  } else if (result.totalDuration > 0) {
+    var mins = Math.round(result.totalDuration / 60);
+    var h = Math.floor(mins / 60), m = mins % 60;
+    timeEl.textContent = h > 0 ? (h + ' שעות ו-' + m + ' דקות') : (m + ' דקות');
+  } else {
+    badge.style.display = 'none';
+  }
+
+  renderWaypoints();
+  renderWaText();
+
+  // Init map AFTER panel is visible — critical for Leaflet sizing
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      initMap();
+    });
+  });
+}
+
+function initMap() {
+  var container = document.getElementById('map');
+  if (!container) return;
+
+  // Destroy previous instance
+  if (map) {
+    try { map.off(); map.remove(); } catch(e) {}
+    map = null;
+    container.innerHTML = '';
+  }
+
+  // Guard: Leaflet must be loaded
+  if (typeof L === 'undefined') {
+    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b7280;font-size:14px;">Leaflet לא נטען — בדוק חיבור</div>';
+    return;
+  }
+
+  map = L.map(container, { zoomControl: true, attributionControl: true });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com">CARTO</a>',
+    subdomains: 'abcd',
+    maxZoom: 20
+  }).addTo(map);
+
+  // Draw route line
+  if (result.geometry && result.geometry.length > 1) {
+    L.polyline(result.geometry, { color: '#2563eb', weight: 4, opacity: 0.85 }).addTo(map);
+  }
+
+  // Draw markers
+  result.waypoints.forEach(function(wp, i) {
+    var isStart = (i === 0);
+    var color = isStart ? '#10b981' : '#ef4444';
+    var icon = L.divIcon({
+      className: '',
+      html: '<div style="width:30px;height:30px;border-radius:50%;background:' + color +
+            ';border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,.35);' +
+            'display:flex;align-items:center;justify-content:center;' +
+            'font-size:12px;font-weight:800;color:white;font-family:sans-serif">' + wp.order + '</div>',
+      iconSize: [30, 30],
+      iconAnchor: [15, 15],
+      popupAnchor: [0, -18]
+    });
+    var label = (wp.name && wp.name.trim()) || (isStart ? 'התחלה' : 'תחנה ' + wp.order);
+    L.marker([wp.lat, wp.lon], { icon: icon }).addTo(map).bindPopup('<b>' + label + '</b>');
+  });
+
+  // Fit all markers in view
+  var bounds = L.latLngBounds(result.waypoints.map(function(w) { return [w.lat, w.lon]; }));
+  map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+
+  // Force Leaflet to recalculate size (fixes grey tile issue)
+  setTimeout(function() { if (map) map.invalidateSize(true); }, 200);
+  setTimeout(function() { if (map) map.invalidateSize(true); }, 600);
+}
+
+function getNavLink(wp) {
+  if (linkType === 'waze') return 'https://waze.com/ul?ll=' + wp.lat + ',' + wp.lon + '&navigate=yes';
+  return 'https://www.google.com/maps/dir/?api=1&destination=' + wp.lat + ',' + wp.lon;
+}
+
+function renderWaypoints() {
+  var html = '';
+  var n = result.waypoints.length;
+  for (var i = 0; i < n; i++) {
+    var wp = result.waypoints[i];
+    var isStart = (i === 0);
+    var isLast  = (i === n - 1);
+    var label = (wp.name && wp.name.trim()) || (isStart ? 'נקודת התחלה' : 'תחנה ' + wp.order);
+    var link  = getNavLink(wp);
+    var navLabel = linkType === 'waze' ? 'פתח ב-Waze 🚗' : 'פתח ב-Google Maps 🗺️';
+    var timeHtml;
+    if (isLast) {
+      timeHtml = '<div class="wp-end">🏁 סוף מסלול</div>';
+    } else if (result.offline) {
+      timeHtml = '<div class="wp-time" style="color:#d97706">⚠️ זמן נסיעה לא זמין (ניתוב לא פעיל)</div>';
+    } else if (wp.durationToNext) {
+      var mins = Math.round(wp.durationToNext / 60);
+      var distPart = wp.distanceToNext ? ' · ' + (wp.distanceToNext / 1000).toFixed(1) + ' ק"מ' : '';
+      timeHtml = '<div class="wp-time">⏱ ' + mins + ' דקות' + distPart + ' לתחנה הבאה</div>';
+    } else {
+      timeHtml = '<div class="wp-end">🏁 סוף מסלול</div>';
+    }
+    html += '<div class="waypoint-item' + (isStart ? ' first' : '') + '">';
+    html += '<div class="wp-num ' + (isStart ? 'green' : 'red') + '">' + wp.order + '</div>';
+    html += '<div class="wp-info">';
+    html += '<div class="wp-name">' + esc(label) + '</div>';
+    html += '<div class="wp-link"><a href="' + link + '" target="_blank" rel="noopener noreferrer">' + navLabel + '</a></div>';
+    html += timeHtml + '</div></div>';
+  }
+  document.getElementById('waypoints-list').innerHTML = html;
+}
+
+function generateWaText() {
+  if (!result) return '';
+  var text = '\uD83D\uDCCD *מסלול חלוקה ממוטב*\n\n';
+  var n = result.waypoints.length;
+  for (var i = 0; i < n; i++) {
+    var wp = result.waypoints[i];
+    var label = (wp.name && wp.name.trim()) || (i === 0 ? 'נקודת התחלה' : 'תחנה ' + wp.order);
+    text += '*' + wp.order + '. ' + label + '*\n';
+    text += '\uD83D\uDD17 ' + getNavLink(wp) + '\n';
+    if (i === n - 1) {
+      text += '\uD83C\uDFC1 סוף מסלול\n';
+    } else if (!result.offline && wp.durationToNext) {
+      var dist = wp.distanceToNext ? ' · ' + (wp.distanceToNext / 1000).toFixed(1) + ' ק"מ' : '';
+      text += '\u23F1 ' + Math.round(wp.durationToNext / 60) + ' דקות' + dist + ' לתחנה הבאה\n\n';
+    } else {
+      text += '\n';
+    }
+  }
+  if (!result.offline && result.totalDuration > 0) {
+    var mins = Math.round(result.totalDuration / 60);
+    var h = Math.floor(mins / 60), m = mins % 60;
+    text += '\nסה"כ זמן נסיעה: ' + (h > 0 ? h + ' שעות ו-' : '') + m + ' דקות';
+  }
+  return text;
+}
+
+function renderWaText() {
+  document.getElementById('wa-preview').textContent = generateWaText();
+}
+
+// ─── UI ───────────────────────────────────────────────────────────────────────
+function setLinkType(type) {
+  linkType = type;
+  document.getElementById('btn-waze').classList.toggle('active', type === 'waze');
+  document.getElementById('btn-gmaps').classList.toggle('active', type === 'gmaps');
+  if (result) { renderWaypoints(); renderWaText(); }
+}
+
+function setLoading(on) {
+  var btn = document.getElementById('btn-calc');
+  btn.disabled = on;
+  btn.innerHTML = on
+    ? '<div class="spinner"></div> מחשב מסלול...'
+    : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg> בניית מסלול נסיעה';
+}
+
+function copyToClipboard() {
+  var text = generateWaText();
+  if (!text) return;
+  var btn = document.getElementById('btn-copy');
+  function markDone() {
+    btn.classList.add('copied');
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> הועתק ✓';
+    showToast('הועתק בהצלחה!', 'success');
+    setTimeout(function() {
+      btn.classList.remove('copied');
+      btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> העתק הודעה לווצאפ';
+    }, 2500);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(markDone, function() { fallbackCopy(text, markDone); });
+  } else {
+    fallbackCopy(text, markDone);
+  }
+}
+
+function fallbackCopy(text, cb) {
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none';
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  try { document.execCommand('copy'); if (cb) cb(); }
+  catch(e) { showToast('שגיאה בהעתקה', 'error'); }
+  document.body.removeChild(ta);
+}
+
+function showToast(msg, type) {
+  var el = document.createElement('div');
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(function() {
+    el.style.transition = 'opacity .3s';
+    el.style.opacity = '0';
+    setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 350);
+  }, 3500);
+}
+
+// ─── START ────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
