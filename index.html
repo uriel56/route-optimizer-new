@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>מוצא מסלולים יעילים</title>
+  <title>מוצא מסלולים — ייעול נסיעות</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
@@ -502,24 +502,6 @@
     #btn-copy.copied { background: var(--success); color: white; }
     #btn-copy:active { transform: scale(.98); }
 
-    /* ─── CUSTOM LEAFLET MARKERS ─── */
-    .custom-marker {
-      width: 30px !important;
-      height: 30px !important;
-      border-radius: 50%;
-      display: flex !important;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
-      font-weight: 800;
-      color: white;
-      font-family: 'Heebo', sans-serif;
-      box-shadow: 0 3px 10px rgba(0,0,0,.25);
-      border: 2.5px solid white;
-    }
-    .marker-start { background: var(--success) !important; }
-    .marker-stop { background: var(--danger) !important; }
-
     /* ─── TOAST ─── */
     #toast-container {
       position: fixed;
@@ -573,16 +555,15 @@
           <polygon points="3 11 22 2 13 21 11 13 3 11"/>
         </svg>
       </div>
-       מוצא מסלולים
+      מוצא מסלולים
     </div>
-    <span class="badge">כלי לתכנון נקודות עצירה </span>
+    <span class="badge">כלי לתכנון סיורים / נקודות עצירה </span>
   </div>
 </header>
 
 <div id="toast-container"></div>
 
 <main>
-  <!-- LEFT: INPUT PANEL -->
   <div>
     <div class="card">
       <div class="card-header">
@@ -596,7 +577,7 @@
         <div class="col-labels">
           <div class="lbl-num"></div>
           <div class="lbl-loc">נ.צ / קישור גוגל מפות</div>
-          <div class="lbl-name">שם התחנה</div>
+          <div class="lbl-name">שם הנקודה</div>
           <div class="lbl-del"></div>
         </div>
 
@@ -627,7 +608,6 @@
     </div>
   </div>
 
-  <!-- RIGHT: OUTPUT PANEL -->
   <div>
     <div id="panel-empty">
       <div class="empty-icon">🗺️</div>
@@ -708,7 +688,7 @@ function updateStop(id, field, value) {
 }
 
 function esc(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s || '').replace(/&/g,'&').replace(/"/g,'"').replace(/</g,'<').replace(/>/g,'>');
 }
 
 function renderStops() {
@@ -727,7 +707,7 @@ function renderStops() {
     html += ' placeholder="' + (isStart ? 'שם (אופציונלי)' : 'שם התחנה') + '"';
     html += ' oninput="updateStop(' + stop.id + ',\'name\',this.value)">';
     html += '<button class="btn-del" onclick="removeStop(' + stop.id + ')"' + (stops.length <= 2 ? ' disabled' : '') + '>';
-    html += '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>';
+    html += '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2-2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>';
     html += '</button></div>';
     if (stop.error) html += '<div class="error-msg">⚠️ ' + esc(stop.error) + '</div>';
     html += '</div>';
@@ -776,7 +756,7 @@ function extractCoordsFromHtml(html) {
   return null;
 }
 
-// Safe fetch with manual timeout — no AbortController
+// Safe fetch with manual timeout
 function timedFetch(url, ms, options) {
   return new Promise(function(resolve, reject) {
     var done = false;
@@ -832,19 +812,170 @@ function resolveLocation(stop) {
   });
 }
 
-// ─── ROUTING ──────────────────────────────────────────────────────────────────
-function haversine(lat1, lon1, lat2, lon2) {
-  var R = 6371000;
-  var dLat = (lat2 - lat1) * Math.PI / 180;
-  var dLon = (lon2 - lon1) * Math.PI / 180;
-  var a = Math.sin(dLat/2)*Math.sin(dLat/2) +
-          Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
-          Math.sin(dLon/2)*Math.sin(dLon/2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+// ─── ROUTING (OSRM - מבוסס כבישים אמיתיים) ──────────────────────────────────
+
+function fetchDistanceMatrix(locations) {
+  var coords = locations.map(function(l) { return l.lon + ',' + l.lat; }).join(';');
+  var url = 'https://router.project-osrm.org/table/v1/driving/' + coords + '?annotations=duration';
+  return timedFetch(url, 15000)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.code !== 'Ok') throw new Error('שגיאה בשליפת זמני נסיעה משרת הניתוב');
+      return data.durations; 
+    });
 }
 
-// Nearest-neighbor ordering — used only when OSRM is unavailable
+function getRouteCost(order, matrix) {
+  var cost = 0;
+  for (var i = 0; i < order.length - 1; i++) {
+    cost += matrix[order[i]][order[i+1]];
+  }
+  return cost;
+}
+
+function twoOpt(order, matrix) {
+  var n = order.length;
+  var improved = true;
+  var currentOrder = order.slice();
+
+  while (improved) {
+    improved = false;
+    for (var i = 1; i < n - 1; i++) {
+      for (var k = i + 1; k < n; k++) {
+        var newOrder = currentOrder.slice(0, i)
+                       .concat(currentOrder.slice(i, k + 1).reverse())
+                       .concat(currentOrder.slice(k + 1));
+        
+        var costBefore = getRouteCost(currentOrder, matrix);
+        var costAfter = getRouteCost(newOrder, matrix);
+
+        if (costAfter < costBefore - 0.1) {
+          currentOrder = newOrder;
+          improved = true;
+        }
+      }
+    }
+  }
+  return currentOrder;
+}
+
+function solveTSP(matrix, locations) {
+  var n = locations.length;
+  if (n <= 2) return locations;
+
+  var bestRoute = null;
+  var bestCost = Infinity;
+
+  // גישה ראשונה: Nearest Neighbor (השכן הקרוב)
+  var nnOrder = [0];
+  var visited = new Array(n).fill(false);
+  visited[0] = true;
+  for (var step = 1; step < n; step++) {
+    var last = nnOrder[nnOrder.length - 1];
+    var bestNext = -1;
+    var bestTime = Infinity;
+    for (var j = 0; j < n; j++) {
+      if (!visited[j] && matrix[last][j] < bestTime) {
+        bestTime = matrix[last][j];
+        bestNext = j;
+      }
+    }
+    visited[bestNext] = true;
+    nnOrder.push(bestNext);
+  }
+
+  // 2-opt על בסיס השכן הקרוב
+  var optimizedNN = twoOpt(nnOrder, matrix);
+  var costNN = getRouteCost(optimizedNN, matrix);
+  if (costNN < bestCost) {
+    bestCost = costNN;
+    bestRoute = optimizedNN;
+  }
+
+  // Random Restarts: 20 חזרות אקראיות למניעת נפילה במינימום מקומי
+  var numRestarts = Math.min(20, n * 2);
+  for (var r = 0; r < numRestarts; r++) {
+    var randomOrder = [0]; // תמיד מתחילים מתחנת המוצא
+    var others = [];
+    for (var i = 1; i < n; i++) others.push(i);
+    
+    // ערבוב שאר התחנות (Shuffle)
+    for (var i = others.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var temp = others[i];
+      others[i] = others[j];
+      others[j] = temp;
+    }
+    randomOrder = randomOrder.concat(others);
+
+    // 2-opt על הסדר האקראי החדש
+    var optimizedRandom = twoOpt(randomOrder, matrix);
+    var costRandom = getRouteCost(optimizedRandom, matrix);
+
+    if (costRandom < bestCost) {
+      bestCost = costRandom;
+      bestRoute = optimizedRandom;
+    }
+  }
+
+  // החזרת המערך המלא של האובייקטים לפי הסדר המנצח
+  return bestRoute.map(function(idx) { return locations[idx]; });
+}
+
+function fetchRoutePath(orderedLocs) {
+  var coords = orderedLocs.map(function(l) { return l.lon + ',' + l.lat; }).join(';');
+  var url = 'https://router.project-osrm.org/route/v1/driving/' + coords + '?geometries=geojson&overview=full';
+  return timedFetch(url, 15000)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.code !== 'Ok') throw new Error('שגיאה ביצירת המסלול');
+      var route = data.routes[0];
+      var geometry = route.geometry.coordinates.map(function(c) { return [c[1], c[0]]; }); 
+
+      var waypoints = orderedLocs.map(function(loc, i) {
+        var isLast = (i === orderedLocs.length - 1);
+        var leg = isLast ? null : route.legs[i];
+        return {
+          order: i + 1,
+          lat: loc.lat,
+          lon: loc.lon,
+          name: loc.name,
+          durationToNext: leg ? leg.duration : null,
+          distanceToNext: leg ? leg.distance : null
+        };
+      });
+
+      return {
+        waypoints: waypoints,
+        geometry: geometry,
+        totalDuration: route.duration,
+        totalDistance: route.distance,
+        offline: false
+      };
+    });
+}
+
+function optimizeRoute(locations) {
+  return fetchDistanceMatrix(locations)
+    .then(function(matrix) {
+      var ordered = solveTSP(matrix, locations);
+      return fetchRoutePath(ordered);            
+    })
+    .catch(function(e) {
+      console.error(e);
+      return buildOfflineResult(locations);
+    });
+}
+
 function buildOfflineResult(locations) {
+  var R = 6371000;
+  function haversine(lat1, lon1, lat2, lon2) {
+    var dLat = (lat2 - lat1) * Math.PI / 180;
+    var dLon = (lon2 - lon1) * Math.PI / 180;
+    var a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
   var n = locations.length;
   var visited = new Array(n).fill(false);
   var order = [0]; visited[0] = true;
@@ -859,161 +990,10 @@ function buildOfflineResult(locations) {
     visited[best] = true; order.push(best);
   }
   var wps = order.map(function(idx, i) {
-    return { order: i+1, lat: locations[idx].lat, lon: locations[idx].lon, name: locations[idx].name,
-             durationToNext: null, distanceToNext: null };
+    return { order: i+1, lat: locations[idx].lat, lon: locations[idx].lon, name: locations[idx].name, durationToNext: null, distanceToNext: null };
   });
   var geo = wps.map(function(w) { return [w.lat, w.lon]; });
   return { waypoints: wps, geometry: geo, totalDuration: 0, totalDistance: 0, offline: true };
-}
-
-// ─── ⚙️ הכנס כאן את ה-API KEY שלך מ-openrouteservice.org ──────────────────────
-var ORS_API_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImFjYzE5ZGQyOGRkOTQwMDFiNjBkZjNiYzZjYmE3OTQ1IiwiaCI6Im11cm11cjY0In0=';
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Try ORS first (reliable, real road data), fall back to OSRM public servers
-var OSRM_SERVERS = [
-  'https://router.project-osrm.org',
-  'https://routing.openstreetmap.de/routed-car'
-];
-
-// OpenRouteService — Step 1: get optimal ORDER, Step 2: get real directions + times
-function orsFetch(locations) {
-  if (!ORS_API_KEY) return Promise.reject(new Error('no_key'));
-
-  // Build optimization request
-  // Location[0] = start depot (fixed), locations[1..n] = jobs to visit
-  var jobs = [];
-  for (var i = 1; i < locations.length; i++) {
-    jobs.push({ id: i, location: [locations[i].lon, locations[i].lat] });
-  }
-  var body = {
-    jobs: jobs,
-    vehicles: [{
-      id: 1,
-      profile: 'driving-car',
-      start: [locations[0].lon, locations[0].lat]
-    }]
-  };
-
-  return timedFetch('https://api.openrouteservice.org/optimization', 15000, {
-    method: 'POST',
-    headers: { 'Authorization': ORS_API_KEY, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    body: JSON.stringify(body)
-  }).then(function(r) {
-    if (!r.ok) throw new Error('ORS optimization HTTP ' + r.status);
-    return r.json();
-  }).then(function(d) {
-    if (!d.routes || !d.routes[0]) throw new Error('ORS bad response');
-
-    // Extract the job visit order from steps
-    var orderedIndices = [0]; // always start from location[0]
-    d.routes[0].steps.forEach(function(s) {
-      if (s.type === 'job') orderedIndices.push(s.job); // s.job = original index in locations[]
-    });
-
-    // Build ordered locations array
-    var orderedLocs = orderedIndices.map(function(idx) { return locations[idx]; });
-
-    // Step 2: get real road directions for the ordered route (geometry + per-leg times)
-    return orsRouteOrdered(orderedLocs);
-  });
-}
-
-// Get real road route for already-ordered locations
-function orsRouteOrdered(orderedLocs) {
-  var coordsArray = orderedLocs.map(function(l) { return [l.lon, l.lat]; });
-
-  return timedFetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', 15000, {
-    method: 'POST',
-    headers: { 'Authorization': ORS_API_KEY, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ coordinates: coordsArray })
-  }).then(function(r) {
-    if (!r.ok) throw new Error('ORS directions HTTP ' + r.status);
-    return r.json();
-  }).then(function(d) {
-    if (!d.features || !d.features[0]) throw new Error('ORS directions bad response');
-
-    var feature = d.features[0];
-    var geometry = feature.geometry.coordinates.map(function(c) { return [c[1], c[0]]; });
-    var legs = feature.properties.segments; // per-leg duration+distance
-
-    var waypoints = orderedLocs.map(function(loc, i) {
-      var leg = legs && legs[i]; // leg[i] = from stop i to stop i+1
-      var isLast = (i === orderedLocs.length - 1);
-      return {
-        order: i + 1,
-        lat: loc.lat, lon: loc.lon, name: loc.name,
-        durationToNext: (!isLast && leg) ? leg.duration : null,
-        distanceToNext: (!isLast && leg) ? leg.distance : null
-      };
-    });
-
-    var totalDuration = (feature.properties.summary && feature.properties.summary.duration) || 0;
-    var totalDistance = (feature.properties.summary && feature.properties.summary.distance) || 0;
-
-    return { waypoints: waypoints, geometry: geometry, totalDuration: totalDuration, totalDistance: totalDistance, offline: false };
-  });
-}
-
-function osrmFetch(path) {
-  var i = 0;
-  function next() {
-    if (i >= OSRM_SERVERS.length) return Promise.reject(new Error('no_server'));
-    var url = OSRM_SERVERS[i++] + path;
-    return timedFetch(url, 8000).then(function(r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    }, function() { return next(); }).catch(function() { return next(); });
-  }
-  return next();
-}
-
-function osrmOptimize(locations) {
-  var coords = locations.map(function(l) { return l.lon + ',' + l.lat; }).join(';');
-  if (locations.length === 2) {
-    return osrmFetch('/route/v1/driving/' + coords + '?overview=full&geometries=geojson&steps=false')
-      .then(function(d) {
-        if (d.code !== 'Ok' || !d.routes || !d.routes[0]) throw new Error('bad');
-        var rt = d.routes[0];
-        var geo = rt.geometry.coordinates.map(function(c) { return [c[1], c[0]]; });
-        var dur = (rt.legs[0] && rt.legs[0].duration) || 0;
-        var dist = (rt.legs[0] && rt.legs[0].distance) || 0;
-        return { waypoints: [
-          { order:1, lat:locations[0].lat, lon:locations[0].lon, name:locations[0].name, durationToNext:dur, distanceToNext:dist },
-          { order:2, lat:locations[1].lat, lon:locations[1].lon, name:locations[1].name, durationToNext:null, distanceToNext:null }
-        ], geometry:geo, totalDuration:dur, totalDistance:dist, offline:false };
-      });
-  }
-  return osrmFetch('/trip/v1/driving/' + coords + '?source=first&destination=any&overview=full&geometries=geojson&steps=false')
-    .then(function(d) {
-      if (d.code !== 'Ok' || !d.trips || !d.trips[0]) throw new Error('bad');
-      var trip = d.trips[0];
-      var geo = trip.geometry.coordinates.map(function(c) { return [c[1], c[0]]; });
-      var sorted = d.waypoints.slice().sort(function(a, b) {
-        return a.trips_index !== b.trips_index ? a.trips_index - b.trips_index : a.waypoint_index - b.waypoint_index;
-      });
-      var ordered = sorted.map(function(wp) { return locations[wp.waypoint_index]; });
-      var wps = ordered.map(function(loc, i) {
-        return { order:i+1, lat:loc.lat, lon:loc.lon, name:loc.name,
-          durationToNext: i < trip.legs.length ? trip.legs[i].duration : null,
-          distanceToNext: i < trip.legs.length ? trip.legs[i].distance : null };
-      });
-      var totalDur  = trip.legs.reduce(function(s,l){ return s+l.duration; }, 0);
-      var totalDist = trip.legs.reduce(function(s,l){ return s+l.distance; }, 0);
-      return { waypoints:wps, geometry:geo, totalDuration:totalDur, totalDistance:totalDist, offline:false };
-    });
-}
-
-function optimizeRoute(locations) {
-  // 1. Try ORS if key is set
-  if (ORS_API_KEY) {
-    return orsFetch(locations)
-      .catch(function() { return osrmOptimize(locations); })
-      .catch(function() { return buildOfflineResult(locations); });
-  }
-  // 2. Try OSRM public servers
-  return osrmOptimize(locations)
-    .catch(function() { return buildOfflineResult(locations); });
 }
 
 // ─── CALCULATE ────────────────────────────────────────────────────────────────
@@ -1032,11 +1012,12 @@ function calculate() {
       if (errors.length) showToast(errors.length + ' תחנות לא נפענחו ויושמטו', 'error');
       var valid = resolved.filter(function(r) { return !r.error && r.lat != null; });
       if (valid.length < 2) { showToast('דרושות לפחות 2 נקודות תקינות', 'error'); setLoading(false); return; }
+      
       return optimizeRoute(valid).then(function(res) {
         result = res;
         renderResult();
         if (result.offline) {
-          showToast('סדר תחנות חושב. שרת הניתוב לא זמין — זמנים לא מוצגים', 'error');
+          showToast('סדר תחנות חושב (זמנים לא מוצגים)', 'error');
         } else {
           showToast('המסלול חושב בהצלחה! ' + result.waypoints.length + ' תחנות', 'success');
         }
@@ -1073,7 +1054,6 @@ function renderResult() {
   renderWaypoints();
   renderWaText();
 
-  // Init map AFTER panel is visible — critical for Leaflet sizing
   requestAnimationFrame(function() {
     requestAnimationFrame(function() {
       initMap();
@@ -1085,14 +1065,12 @@ function initMap() {
   var container = document.getElementById('map');
   if (!container) return;
 
-  // Destroy previous instance
   if (map) {
     try { map.off(); map.remove(); } catch(e) {}
     map = null;
     container.innerHTML = '';
   }
 
-  // Guard: Leaflet must be loaded
   if (typeof L === 'undefined') {
     container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b7280;font-size:14px;">Leaflet לא נטען — בדוק חיבור</div>';
     return;
@@ -1101,17 +1079,15 @@ function initMap() {
   map = L.map(container, { zoomControl: true, attributionControl: true });
 
   L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com">CARTO</a>',
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com">CARTO</a>',
     subdomains: 'abcd',
     maxZoom: 20
   }).addTo(map);
 
-  // Draw route line
   if (result.geometry && result.geometry.length > 1) {
     L.polyline(result.geometry, { color: '#2563eb', weight: 4, opacity: 0.85 }).addTo(map);
   }
 
-  // Draw markers
   result.waypoints.forEach(function(wp, i) {
     var isStart = (i === 0);
     var color = isStart ? '#10b981' : '#ef4444';
@@ -1129,11 +1105,9 @@ function initMap() {
     L.marker([wp.lat, wp.lon], { icon: icon }).addTo(map).bindPopup('<b>' + label + '</b>');
   });
 
-  // Fit all markers in view
   var bounds = L.latLngBounds(result.waypoints.map(function(w) { return [w.lat, w.lon]; }));
   map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
 
-  // Force Leaflet to recalculate size (fixes grey tile issue)
   setTimeout(function() { if (map) map.invalidateSize(true); }, 200);
   setTimeout(function() { if (map) map.invalidateSize(true); }, 600);
 }
